@@ -34,14 +34,15 @@ services:
     expose: ["8080"]
     networks: [searchnet]
     restart: unless-stopped
-    read_only: true
-    tmpfs: [/tmp, /var/cache/searxng]
-    cap_drop: [ALL]
+    # The official entrypoint updates the CA store and fixes cache ownership
+    # before dropping privileges, so this container cannot be read-only or
+    # stripped of CHOWN/SETUID capabilities during startup.
+    tmpfs: [/tmp]
     security_opt: [no-new-privileges:true]
     mem_limit: ${SEARXNG_MEMORY:-768m}
     cpus: ${SEARXNG_CPUS:-1.0}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; request=urllib.request.Request('http://127.0.0.1:8080/', headers={'X-Forwarded-For':'127.0.0.1'}); urllib.request.urlopen(request, timeout=3)"]
       interval: 15s
       timeout: 5s
       retries: 8
