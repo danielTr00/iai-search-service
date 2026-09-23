@@ -1,4 +1,8 @@
-use_default_settings: true
+use_default_settings:
+  engines:
+    remove:
+      - ahmia
+      - torch
 
 general:
   instance_name: "iAi Search"

@@ -21,6 +21,12 @@ services:
     user: "1000:1000"
     mem_limit: ${SEARCH_API_MEMORY:-512m}
     cpus: ${SEARCH_API_CPUS:-0.75}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
     logging:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
@@ -31,6 +37,7 @@ services:
       SEARXNG_BASE_URL: http://searxng:8080/
     volumes:
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - ./searxng/limiter.toml:/etc/searxng/limiter.toml:ro
     expose: ["8080"]
     networks: [searchnet]
     restart: unless-stopped
@@ -50,6 +57,29 @@ services:
     logging:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
+
+  deployment-benchmark:
+    image: python:3.13-alpine
+    command: ["python", "/benchmark.py"]
+    environment:
+      SEARCH_API_TOKEN: ${SEARCH_API_TOKEN:?set SEARCH_API_TOKEN}
+      SEARCH_BENCHMARK_URL: http://search-api:8080/v1/research
+    volumes:
+      - ./scripts/deployment_benchmark.py:/benchmark.py:ro
+    depends_on:
+      search-api:
+        condition: service_healthy
+    networks: [searchnet]
+    restart: "no"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options: {max-size: "2m", max-file: "2"}
 
 networks:
   searchnet:
