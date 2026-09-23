@@ -69,6 +69,10 @@ class ResearchService:
         response = await self._get_client().get(
             f"{self.searxng_url}/search",
             params=params,
+            headers={
+                "X-Forwarded-For": "127.0.0.1",
+                "X-Real-IP": "127.0.0.1",
+            },
             timeout=15,
         )
         response.raise_for_status()

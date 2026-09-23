@@ -28,6 +28,8 @@ async def public_resolver(host, port):
 async def test_search_then_extract_returns_sources_and_partial_errors():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "searxng":
+            assert request.headers["x-forwarded-for"] == "127.0.0.1"
+            assert request.headers["x-real-ip"] == "127.0.0.1"
             return httpx.Response(200, json={"results": [
                 {"title": "One", "url": "https://one.example/a", "content": "first snippet"},
                 {"title": "Two", "url": "https://two.example/b", "content": "second snippet"},
