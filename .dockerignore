@@ -1,0 +1,10 @@
+# Keep local credentials, virtualenvs, caches and VCS history outside the build context.
+.env
+.venv
+.git
+.github
+.pytest_cache
+__pycache__
+*.py[cod]
+tests
+.DS_Store
