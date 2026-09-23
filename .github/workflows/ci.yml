@@ -20,4 +20,6 @@ jobs:
       - run: python -m compileall -q src
       - run: python -m pytest
       - run: docker compose config
+        env:
+          SEARCH_API_TOKEN: ci-placeholder-token-at-least-twenty-characters
       - run: docker build -t iai-search-service:ci .
