@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import ipaddress
 import json
 import re
+import ssl
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -48,6 +50,22 @@ def _is_source_page(item: dict) -> bool:
     if host == "accounts.google.com":
         return False
     return not (host in {"google.com", "www.google.com"} and parsed.path in {"/search", "/url"})
+
+
+def _connection_error(exc: httpx.ConnectError) -> str:
+    cause = exc.__cause__
+    for _ in range(5):
+        if cause is None:
+            break
+        if isinstance(cause, ssl.SSLCertVerificationError):
+            return "TLS verification failed"
+        if isinstance(cause, OSError):
+            if cause.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH}:
+                return "network unreachable"
+            if cause.errno == errno.ECONNREFUSED:
+                return "connection refused"
+        cause = cause.__cause__
+    return "connection error"
 
 
 class ResearchService:
@@ -288,8 +306,8 @@ class ResearchService:
             message = f"HTTP {exc.response.status_code}"
         except httpx.TimeoutException:
             message = "request timed out"
-        except httpx.ConnectError:
-            message = "connection error"
+        except httpx.ConnectError as exc:
+            message = _connection_error(exc)
         except httpx.HTTPError:
             message = "request failed"
         except OSError:

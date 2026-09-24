@@ -1,7 +1,10 @@
 import asyncio
+import errno
+import ssl
 import threading
 
 import httpx
+import pytest
 
 from iai_search_service.models import ResearchRequest
 from iai_search_service.service import ResearchService
@@ -71,6 +74,27 @@ async def test_extract_failure_reports_safe_http_status_and_transport_cause():
 
     assert [error.message for error in result.errors] == ["HTTP 403", "connection error"]
     assert "private proxy" not in str(result.errors)
+
+
+@pytest.mark.parametrize("cause, expected", [
+    (OSError(errno.ENETUNREACH, "sensitive network detail"), "network unreachable"),
+    (OSError(errno.ECONNREFUSED, "sensitive upstream detail"), "connection refused"),
+    (ssl.SSLCertVerificationError("sensitive TLS detail"), "TLS verification failed"),
+])
+async def test_connection_failure_reports_safe_network_cause(cause, expected):
+    def handler(request: httpx.Request) -> httpx.Response:
+        try:
+            raise cause
+        except OSError as exc:
+            raise httpx.ConnectError("private host and token", request=request) from exc
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        service = ResearchService("http://searxng:8080", client=client, resolver=public_resolver)
+        result = await service.research(ResearchRequest(urls=["https://offline.example/article"]))
+
+    assert [error.message for error in result.errors] == [expected]
+    assert "private host" not in str(result.errors)
+    assert "sensitive" not in str(result.errors)
 
 
 async def test_long_research_task_searches_with_concise_topic_terms():
