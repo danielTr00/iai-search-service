@@ -12,7 +12,8 @@ def test_general_web_has_independent_search_engines():
     assert {"google cse", "wikipedia", "wikidata"} <= removed
     assert "brave" not in removed
     assert overrides["brave"]["disabled"] is True
-    assert {"bing", "qwant", "yahoo"} <= {
+    assert overrides["qwant"]["disabled"] is True
+    assert {"bing", "yahoo"} <= {
         name for name, entry in overrides.items()
         if entry.get("disabled") is False and entry.get("inactive", False) is False
     }

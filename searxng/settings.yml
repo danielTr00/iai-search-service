@@ -14,7 +14,7 @@ engines:
   - name: bing
     disabled: false
   - name: qwant
-    disabled: false
+    disabled: true
   - name: yahoo
     disabled: false
 

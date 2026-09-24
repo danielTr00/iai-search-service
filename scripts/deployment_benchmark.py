@@ -6,6 +6,7 @@ import statistics
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 
 ENDPOINT = os.getenv("SEARCH_BENCHMARK_URL", "http://search-api:8080/v1/research")
 TOKEN = os.environ["SEARCH_API_TOKEN"]
@@ -76,9 +77,12 @@ def probe() -> list[dict]:
         )
         with urllib.request.urlopen(request, timeout=90) as response:
             value = json.load(response)
+        if not value.get("results"):
+            raise ValueError(f"{label} returned no results")
         results.append({
             "probe": label,
             "results": len(value.get("results", [])),
+            "hosts": [urlsplit(item.get("url", "")).hostname for item in value.get("results", [])],
             "failed_results": [item["error"] for item in value.get("failed_results", [])],
         })
     return results
