@@ -41,6 +41,49 @@ def research(query: str) -> dict:
     }
 
 
+def probe() -> list[dict]:
+    """Exercise both agent-facing routes on realistic queries and source pages."""
+    base = ENDPOINT.removesuffix("/v1/research")
+    requests = [
+        ("short_search", "/search", {
+            "query": "EU premium vehicle software defined vehicle regulation 2030",
+            "search_depth": "advanced", "max_results": 3,
+        }),
+        ("agent_search", "/search", {
+            "query": (
+                "Find authoritative, verifiable sources relevant to measurable developments "
+                "in the EU premium passenger vehicle market through 2030, focused on "
+                "software-defined vehicles, automotive software, connectivity, automated driving, "
+                "and regulatory requirements. Include sources from EU institutions, European "
+                "Commission, UNECE, ACEA, BMW, Mercedes-Benz, reputable market research if available. "
+                "Return URLs, publication dates and specific measurable claims."
+            ),
+            "search_depth": "advanced", "max_results": 3,
+        }),
+        ("known_urls", "/extract", {
+            "urls": [
+                "https://eur-lex.europa.eu/eli/reg/2024/1689/oj",
+                "https://www.bmwgroup.com/en/company/strategy.html",
+                "https://docs.searxng.org/",
+            ], "extract_depth": "basic", "format": "text",
+        }),
+    ]
+    results = []
+    for label, path, payload in requests:
+        request = urllib.request.Request(
+            base + path, data=json.dumps(payload).encode(), method="POST",
+            headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=90) as response:
+            value = json.load(response)
+        results.append({
+            "probe": label,
+            "results": len(value.get("results", [])),
+            "failed_results": [item["error"] for item in value.get("failed_results", [])],
+        })
+    return results
+
+
 def main() -> None:
     warmup = research(QUERIES[0])
     print(json.dumps({"phase": "warmup", **warmup}), flush=True)
@@ -64,6 +107,8 @@ def main() -> None:
         "total_partial_errors": sum(item["partial_errors"] for item in results),
     }
     print(json.dumps(summary), flush=True)
+    for result in probe():
+        print(json.dumps({"phase": "probe", **result}), flush=True)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,18 @@ use_default_settings:
       - ahmia
       - duckduckgo
       - torch
+      - brave
+      - google cse
+      - wikipedia
+      - wikidata
+
+engines:
+  - name: bing
+    disabled: false
+  - name: qwant
+    disabled: false
+  - name: yahoo
+    disabled: false
 
 general:
   instance_name: "iAi Search"

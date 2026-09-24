@@ -254,8 +254,14 @@ class ResearchService:
             )
         except UnsafeUrlError as exc:
             message = str(exc)
+        except httpx.HTTPStatusError as exc:
+            message = f"HTTP {exc.response.status_code}"
+        except httpx.TimeoutException:
+            message = "request timed out"
+        except httpx.ConnectError:
+            message = "connection error"
         except httpx.HTTPError:
-            message = "connection failed"
+            message = "request failed"
         except OSError:
             message = "target did not resolve"
         except ValueError as exc:

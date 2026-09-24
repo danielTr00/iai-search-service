@@ -57,6 +57,22 @@ async def test_search_then_extract_returns_sources_and_partial_errors():
     assert result.errors[0].stage == "fetch"
 
 
+async def test_extract_failure_reports_safe_http_status_and_transport_cause():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("host") == "denied.example":
+            return page_response(403, text="Access denied")
+        raise httpx.ConnectError("private proxy address/token=secret", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        service = ResearchService("http://searxng:8080", client=client, resolver=public_resolver)
+        result = await service.research(ResearchRequest(urls=[
+            "https://denied.example/article", "https://offline.example/article",
+        ]))
+
+    assert [error.message for error in result.errors] == ["HTTP 403", "connection error"]
+    assert "private proxy" not in str(result.errors)
+
+
 async def test_fast_search_returns_snippets_without_fetching_pages():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "searxng"
