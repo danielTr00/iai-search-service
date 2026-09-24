@@ -90,4 +90,5 @@ services:
 
 networks:
   searchnet:
+    name: iai-research-net
     driver: bridge
