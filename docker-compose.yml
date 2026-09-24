@@ -18,7 +18,9 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:${SEARCH_PORT:-8090}:8080"
-    networks: [searchnet]
+    networks:
+      searchnet:
+        aliases: [search-api]
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
@@ -46,7 +48,9 @@ services:
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
       - ./searxng/limiter.toml:/etc/searxng/limiter.toml:ro
     expose: ["8080"]
-    networks: [searchnet]
+    networks:
+      searchnet:
+        aliases: [searxng]
     restart: unless-stopped
     # The official entrypoint updates the CA store and fixes cache ownership
     # before dropping privileges, so this container cannot be read-only or
