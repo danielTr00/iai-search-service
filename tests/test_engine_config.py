@@ -9,7 +9,9 @@ def test_general_web_has_independent_search_engines():
     )
     removed = set(settings["use_default_settings"]["engines"]["remove"])
     overrides = {engine["name"]: engine for engine in settings.get("engines", [])}
-    assert {"brave", "google cse", "wikipedia", "wikidata"} <= removed
+    assert {"google cse", "wikipedia", "wikidata"} <= removed
+    assert "brave" not in removed
+    assert overrides["brave"]["disabled"] is True
     assert {"bing", "qwant", "yahoo"} <= {
         name for name, entry in overrides.items()
         if entry.get("disabled") is False and entry.get("inactive", False) is False

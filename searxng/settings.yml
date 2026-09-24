@@ -4,12 +4,13 @@ use_default_settings:
       - ahmia
       - duckduckgo
       - torch
-      - brave
       - google cse
       - wikipedia
       - wikidata
 
 engines:
+  - name: brave
+    disabled: true
   - name: bing
     disabled: false
   - name: qwant
