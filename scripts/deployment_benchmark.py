@@ -79,6 +79,11 @@ def probe() -> list[dict]:
             value = json.load(response)
         if not value.get("results"):
             raise ValueError(f"{label} returned no results")
+        if path == "/search" and not any(
+            urlsplit(item.get("url", "")).hostname != "accounts.google.com"
+            for item in value["results"]
+        ):
+            raise ValueError(f"{label} returned no usable sources")
         results.append({
             "probe": label,
             "results": len(value.get("results", [])),

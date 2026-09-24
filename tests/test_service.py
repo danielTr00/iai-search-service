@@ -73,6 +73,53 @@ async def test_extract_failure_reports_safe_http_status_and_transport_cause():
     assert "private proxy" not in str(result.errors)
 
 
+async def test_long_research_task_searches_with_concise_topic_terms():
+    task = (
+        "Find authoritative, verifiable sources relevant to measurable developments in the "
+        "EU premium passenger vehicle market through 2030, focused on software-defined vehicles, "
+        "automotive software, connectivity, automated driving, and regulatory requirements. "
+        "Include sources from EU institutions, European Commission, UNECE, ACEA, BMW, "
+        "Mercedes-Benz, reputable market research if available. Return URLs and publication dates."
+    )
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.params["q"])
+        return httpx.Response(200, json={"results": [{
+            "title": "EU automotive software", "url": "https://europa.eu/article", "content": "official snippet",
+        }]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        service = ResearchService("http://searxng:8080", client=client)
+        result = await service.research(ResearchRequest(task=task, search_depth="fast"))
+
+    assert result.query == task
+    assert len(result.sources) == 1
+    assert len(seen) == 1
+    assert len(seen[0]) <= 150
+    assert "EU premium passenger vehicle" in seen[0]
+    assert "software-defined vehicles" in seen[0]
+    assert "regulatory requirements" in seen[0]
+    assert "measurable developments" not in seen[0]
+    assert "Find authoritative" not in seen[0]
+    assert "Return URLs" not in seen[0]
+
+
+async def test_search_discards_google_login_and_search_navigation_links():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"results": [
+            {"title": "Sign in", "url": "https://accounts.google.com/v3/signin", "content": "Google login"},
+            {"title": "Search", "url": "https://www.google.com/search?q=vehicles", "content": "Google search"},
+            {"title": "EU vehicle policy", "url": "https://digital-strategy.ec.europa.eu/vehicle", "content": "EU text"},
+        ]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        service = ResearchService("http://searxng:8080", client=client)
+        result = await service.research(ResearchRequest(task="EU vehicle policy", search_depth="fast"))
+
+    assert [source.url for source in result.sources] == ["https://digital-strategy.ec.europa.eu/vehicle"]
+
+
 async def test_fast_search_returns_snippets_without_fetching_pages():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "searxng"

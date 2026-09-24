@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -20,6 +21,33 @@ from .security import ResolvedPublicUrl, Resolver, UnsafeUrlError, resolve_publi
 _MAX_BODY_BYTES = 2_000_000
 _MAX_CONTENT_CHARS = 24_000
 _MAX_REDIRECTS = 3
+_SEARCH_STOPWORDS = frozenset({
+    "find", "search", "research", "authoritative", "verifiable", "sources", "source",
+    "relevant", "measurable", "developments", "focused", "focus", "include", "including", "return", "urls", "url",
+    "publication", "dates", "claims", "specific", "reputable", "available", "if",
+    "the", "a", "an", "in", "on", "of", "to", "for", "from", "through", "with",
+    "and", "or", "about", "that", "which", "are", "is", "be", "by",
+})
+
+
+def _search_query(task: str) -> str:
+    if len(task) <= 160:
+        return task
+    terms = [
+        word for word in re.findall(r"[^\W_]+(?:-[^\W_]+)*", task)
+        if word.casefold() not in _SEARCH_STOPWORDS
+    ][:15]
+    while terms and len(" ".join(terms)) > 150:
+        terms.pop()
+    return " ".join(terms) or task[:150]
+
+
+def _is_source_page(item: dict) -> bool:
+    parsed = urlsplit(str(item.get("url") or ""))
+    host = (parsed.hostname or "").lower()
+    if host == "accounts.google.com":
+        return False
+    return not (host in {"google.com", "www.google.com"} and parsed.path in {"/search", "/url"})
 
 
 class ResearchService:
@@ -114,7 +142,7 @@ class ResearchService:
 
     async def _search_uncached(self, request: ResearchRequest) -> list[dict]:
         params: dict[str, str | int] = {
-            "q": request.task,
+            "q": _search_query(request.task),
             "format": "json",
             "language": "auto",
             "safesearch": 1,
@@ -133,7 +161,9 @@ class ResearchService:
         )
         response.raise_for_status()
         payload = response.json()
-        return list(payload.get("results") or [])[: max(request.max_sources * 2, request.max_sources)]
+        return [
+            item for item in payload.get("results") or [] if _is_source_page(item)
+        ][: max(request.max_sources * 2, request.max_sources)]
 
     @staticmethod
     def _filter_domains(candidates: list[dict], allowed_domains: list[str]) -> list[dict]:

@@ -22,6 +22,29 @@ def test_probe_rejects_successful_http_responses_without_usable_sources(monkeypa
         bench.probe()
 
 
+def test_probe_rejects_login_pages_as_only_search_results(monkeypatch):
+    monkeypatch.setenv("SEARCH_API_TOKEN", "test-token-not-secret")
+    bench = importlib.import_module("scripts.deployment_benchmark")
+    calls = 0
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.close()
+
+    def urlopen(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        url = "https://source.example/article" if calls == 1 else "https://accounts.google.com/signin"
+        return Response(json.dumps({"results": [{"url": url}]}).encode())
+
+    monkeypatch.setattr(bench.urllib.request, "urlopen", urlopen)
+    with pytest.raises(ValueError, match="agent_search returned no usable sources"):
+        bench.probe()
+
+
 def test_live_probe_checks_agent_search_and_extract_routes_without_logging_content(monkeypatch):
     monkeypatch.setenv("SEARCH_API_TOKEN", "test-token-not-secret")
     bench = importlib.import_module("scripts.deployment_benchmark")
