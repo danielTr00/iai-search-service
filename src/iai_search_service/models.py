@@ -1,8 +1,29 @@
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+_DOMAIN_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
+
+
+def _normalize_domains(values: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for value in values:
+        domain = value.strip().rstrip(".")
+        if not domain or len(domain) > 253:
+            raise ValueError("domains must be plain host names")
+        try:
+            domain = domain.encode("idna").decode("ascii").lower()
+        except UnicodeError as exc:
+            raise ValueError("domains must be valid IDNA host names") from exc
+        labels = domain.split(".")
+        if any(not _DOMAIN_LABEL.fullmatch(label) for label in labels):
+            raise ValueError("domains must be plain host names")
+        normalized.append(domain)
+    return normalized
 
 
 class ResearchRequest(BaseModel):
@@ -33,13 +54,7 @@ class ResearchRequest(BaseModel):
     @field_validator("allowed_domains", "excluded_domains")
     @classmethod
     def normalize_domains(cls, values: list[str]) -> list[str]:
-        normalized: list[str] = []
-        for value in values:
-            domain = value.strip().lower().rstrip(".")
-            if not domain or len(domain) > 253 or "/" in domain or ":" in domain:
-                raise ValueError("allowed domains must be plain host names")
-            normalized.append(domain)
-        return normalized
+        return _normalize_domains(values)
 
     @model_validator(mode="after")
     def require_work(self) -> "ResearchRequest":
@@ -71,13 +86,7 @@ class SearchRequest(BaseModel):
     @field_validator("include_domains", "exclude_domains")
     @classmethod
     def normalize_search_domains(cls, values: list[str]) -> list[str]:
-        normalized: list[str] = []
-        for value in values:
-            domain = value.strip().lower().rstrip(".")
-            if not domain or len(domain) > 253 or "/" in domain or ":" in domain:
-                raise ValueError("domains must be plain host names")
-            normalized.append(domain)
-        return normalized
+        return _normalize_domains(values)
 
 
 class SearchResult(BaseModel):

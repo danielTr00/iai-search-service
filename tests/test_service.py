@@ -584,21 +584,81 @@ async def test_redirected_unicode_url_is_charged_by_encoded_bytes_in_source_cach
 
 
 async def test_allowed_domains_filter_search_results():
+    queries = []
+
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.host == "searxng":
-            return httpx.Response(200, json={"results": [
-                {"title": "Allowed", "url": "https://docs.example.com/a", "content": "ok"},
-                {"title": "Blocked", "url": "https://other.example/b", "content": "no"},
-            ]})
-        return page_response(200, text="<p>Allowed domain body text.</p>")
+        queries.append(request.url.params["q"])
+        return httpx.Response(200, json={"results": [
+            {"title": "Allowed", "url": "https://docs.example.com/a", "content": "ok"},
+            {"title": "Blocked", "url": "https://other.example/b", "content": "no"},
+            {"title": "Lookalike", "url": "https://notexample.com/b", "content": "no"},
+        ]})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         service = ResearchService("http://searxng:8080", client=client, resolver=public_resolver)
         result = await service.research(ResearchRequest(
-            task="query", max_sources=3, allowed_domains=["example.com"]
+            task="query", max_sources=1, search_depth="fast", allowed_domains=["EXAMPLE.com."]
+        ))
+
+    assert len(queries) == 1
+    assert queries[0] == "site:example.com query"
+    assert [source.url for source in result.sources] == ["https://docs.example.com/a"]
+
+
+async def test_allowed_result_after_unrelated_top_results_survives_candidate_cap():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"results": [
+            {"url": f"https://other{i}.example/a"} for i in range(4)
+        ] + [{"url": "https://docs.example.com/a", "content": "allowed"}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        service = ResearchService("http://searxng:8080", client=client, resolver=public_resolver)
+        result = await service.research(ResearchRequest(
+            task="query", max_sources=1, search_depth="fast", allowed_domains=["example.com"]
         ))
 
     assert [source.url for source in result.sources] == ["https://docs.example.com/a"]
+
+
+async def test_multiple_allowed_domains_filter_before_cap_without_changing_query():
+    queries = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        queries.append(request.url.params["q"])
+        return httpx.Response(200, json={"results": [
+            {"url": "https://blocked.example/a"},
+            {"url": "https://docs.one.example/a"},
+            {"url": "https://news.two.example/a"},
+        ]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        service = ResearchService("http://searxng:8080", client=client)
+        result = await service.research(ResearchRequest(
+            task="query", max_sources=2, search_depth="fast",
+            allowed_domains=["one.example", "two.example"]
+        ))
+
+    assert queries == ["query"]
+    assert [source.url for source in result.sources] == [
+        "https://docs.one.example/a", "https://news.two.example/a"
+    ]
+
+
+async def test_empty_domain_filtered_results_do_not_retry_unrestricted():
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.params["q"])
+        return httpx.Response(200, json={"results": [{"url": "https://blocked.example/a"}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        service = ResearchService("http://searxng:8080", client=client)
+        result = await service.research(ResearchRequest(
+            task="query", search_depth="fast", allowed_domains=["allowed.example"]
+        ))
+
+    assert calls == ["site:allowed.example query"]
+    assert result.sources == []
 
 
 async def test_fetch_pins_validated_ip_and_preserves_host_header():

@@ -150,7 +150,7 @@ class ResearchService:
         )
 
     async def _search(self, request: ResearchRequest) -> list[dict]:
-        key = (request.task, request.topic, request.freshness, request.search_depth, request.max_sources)
+        key = (request.task, request.topic, request.freshness, request.search_depth, request.max_sources, tuple(request.allowed_domains))
         return await self._query_cache.get_or_load(
             key,
             lambda: self._search_uncached(request),
@@ -159,8 +159,11 @@ class ResearchService:
         )
 
     async def _search_uncached(self, request: ResearchRequest) -> list[dict]:
+        query = _search_query(request.task)
+        if len(request.allowed_domains) == 1:
+            query = f"site:{request.allowed_domains[0]} {query}"
         params: dict[str, str | int] = {
-            "q": _search_query(request.task),
+            "q": query,
             "format": "json",
             "language": "auto",
             "safesearch": 1,
@@ -179,9 +182,11 @@ class ResearchService:
         )
         response.raise_for_status()
         payload = response.json()
-        return [
+        candidates = [
             item for item in payload.get("results") or [] if _is_source_page(item)
-        ][: max(request.max_sources * 2, request.max_sources)]
+        ]
+        candidates = self._filter_domains(candidates, request.allowed_domains)
+        return candidates[: max(request.max_sources * 2, request.max_sources)]
 
     @staticmethod
     def _filter_domains(candidates: list[dict], allowed_domains: list[str]) -> list[dict]:
